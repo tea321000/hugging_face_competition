@@ -139,6 +139,7 @@ if __name__ == '__main__':
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     configuration = BertConfig(hidden_size=args.hidden_size, num_hidden_layers=args.num_hidden_layers, num_attention_heads = args.num_attention_heads)
     model = BertModel(configuration)
+    print("pytorch model", model)
     dataset = OneflowDataloaderToPytorchDataset(args)
     trainer = MultilabelTrainer(model=model)
     text = "Replace me by any text you'd like."
