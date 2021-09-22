@@ -76,12 +76,12 @@ if __name__ == '__main__':
         default=12,
         help="Number of attention heads",
     )
-    # parser.add_argument(
-    #     "--intermediate_size",
-    #     type=int,
-    #     default=3072,
-    #     help="intermediate size of bert encoder",
-    # )
+    parser.add_argument(
+        "--intermediate_size",
+        type=int,
+        default=3072,
+        help="intermediate size of bert encoder",
+    )
     parser.add_argument("--max_position_embeddings", type=int, default=512)
     parser.add_argument(
         "-s", "--seq_length", type=int, default=128, help="Maximum sequence len"
@@ -137,7 +137,7 @@ if __name__ == '__main__':
 
     print("Creating Dataloader")
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-    configuration = BertConfig(hidden_size=args.hidden_size, num_hidden_layers=args.num_hidden_layers, num_attention_heads = args.num_attention_heads)
+    configuration = BertConfig(hidden_size=args.hidden_size, num_hidden_layers=args.num_hidden_layers, num_attention_heads= args.num_attention_heads, intermediate_size=args.intermediate_size)
     model = BertModel(configuration)
     print("pytorch model", model)
     dataset = OneflowDataloaderToPytorchDataset(args)
