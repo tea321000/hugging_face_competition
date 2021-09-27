@@ -3,7 +3,7 @@ from abc import ABC
 import torch
 from torch import nn
 from torch.utils.data import Dataset
-from transformers import BertTokenizer, BertModel, BertConfig, Trainer
+from transformers import BertTokenizer, BertModel, BertConfig, Trainer, AdamW, get_scheduler
 from ofrecord_data_utils import OfRecordDataLoader
 import oneflow as flow
 import argparse
@@ -41,7 +41,8 @@ class OneflowDataloaderToPytorchDataset(Dataset):
 class BertPreTrainingHeads(nn.Module):
     def __init__(self, hidden_size, vocab_size, hidden_act=nn.GELU()):
         super().__init__()
-        self.predictions = BertLMPredictionHead(hidden_size, vocab_size, hidden_act)
+        self.predictions = BertLMPredictionHead(
+            hidden_size, vocab_size, hidden_act)
         self.seq_relationship = nn.Linear(hidden_size, 2)
 
     def forward(self, sequence_output, pooled_output):
@@ -84,22 +85,24 @@ class BertPredictionHeadTransform(nn.Module):
         return sequence_output
 
 
-class MultilabelTrainer(Trainer):
-    def __init__(self, *args, **kwargs):
+class PreTrainer(Trainer):
+    def __init__(self, max_predictions_per_seq, *args, **kwargs):
         super().__init__(*args, **kwargs)
         mlm_criterion = nn.CrossEntropyLoss(reduction="none")
+        self.max_predictions_per_seq = max_predictions_per_seq
 
         def get_masked_lm_loss(
                 logit_blob,
                 masked_lm_positions,
                 masked_lm_labels,
                 label_weights,
-                max_prediction_per_seq,
+                max_predictions_per_seq,
         ):
             # gather valid position indices
             logit_blob = torch.gather(
                 logit_blob,
-                index=masked_lm_positions.unsqueeze(2).to(dtype=torch.int64).repeat(1, 1, 30522),
+                index=masked_lm_positions.unsqueeze(2).to(
+                    dtype=torch.int64).repeat(1, 1, 30522),
                 dim=1,
             )
             logit_blob = torch.reshape(logit_blob, [-1, 30522])
@@ -110,7 +113,8 @@ class MultilabelTrainer(Trainer):
             # tensor has a value of 1.0 for every real prediction and 0.0 for the
             # padding predictions.
             pre_example_loss = mlm_criterion(logit_blob, label_id_blob.long())
-            pre_example_loss = torch.reshape(pre_example_loss, [-1, max_prediction_per_seq])
+            pre_example_loss = torch.reshape(
+                pre_example_loss, [-1, max_predictions_per_seq])
             sum_label_weight = torch.sum(label_weights, dim=-1)
             sum_label_weight = sum_label_weight / label_weights.shape[0]
             numerator = torch.sum(pre_example_loss * label_weights)
@@ -121,17 +125,16 @@ class MultilabelTrainer(Trainer):
         self.ns_criterion = nn.CrossEntropyLoss(reduction="mean")
         self.masked_lm_criterion = get_masked_lm_loss
 
-    def compute_loss(self, model, cls, labels, id, pos, weight, max_prediction_per_seq, inputs, return_outputs=False):
-        # labels = inputs["labels"]
+    def compute_loss(self, model, cls, labels, id, pos, weight, inputs, return_outputs=False):
         outputs = model(**inputs)
-        # self.cls = BertPreTrainingHeads(hidden_size, vocab_size)
-        prediction_scores, seq_relationship_scores = cls(outputs.last_hidden_state, outputs.pooler_output)
+        prediction_scores, seq_relationship_scores = cls(
+            outputs.last_hidden_state, outputs.pooler_output)
         next_sentence_loss = self.ns_criterion(
             seq_relationship_scores.view(-1, 2), labels.long().view(-1)
         )
 
         masked_lm_loss = self.masked_lm_criterion(
-            prediction_scores, pos, id, weight, max_prediction_per_seq=max_prediction_per_seq
+            prediction_scores, pos, id, weight, max_predictions_per_seq=self.max_predictions_per_seq
         )
 
         total_loss = next_sentence_loss + masked_lm_loss
@@ -151,10 +154,6 @@ if __name__ == '__main__':
         "--train_batch_size", type=int, default=32, help="Training batch size"
     )
     parser.add_argument(
-        "--val_batch_size", type=int, default=32, help="Validation batch size"
-    )
-
-    parser.add_argument(
         "--hidden_size", type=int, default=768, help="Hidden size of transformer model",
     )
     parser.add_argument(
@@ -168,91 +167,48 @@ if __name__ == '__main__':
         help="Number of attention heads",
     )
     parser.add_argument(
-        "--intermediate_size",
-        type=int,
-        default=3072,
-        help="intermediate size of bert encoder",
-    )
-    parser.add_argument("--max_position_embeddings", type=int, default=512)
-    parser.add_argument(
         "-s", "--seq_length", type=int, default=128, help="Maximum sequence len"
     )
     parser.add_argument(
         "--vocab_size", type=int, default=30522, help="Total number of vocab"
     )
-    parser.add_argument("--type_vocab_size", type=int, default=2)
-    parser.add_argument("--attention_probs_dropout_prob", type=float, default=0.1)
-    parser.add_argument("--hidden_dropout_prob", type=float, default=0.1)
-    parser.add_argument("--hidden_size_per_head", type=int, default=64)
     parser.add_argument("--max_predictions_per_seq", type=int, default=20)
-    parser.add_argument("-e", "--epochs", type=int, default=10, help="Number of epochs")
-
-    parser.add_argument(
-        "--with-cuda",
-        type=bool,
-        default=True,
-        help="Training with CUDA: true, or false",
-    )
-    parser.add_argument(
-        "--cuda_devices", type=int, nargs="+", default=None, help="CUDA device ids"
-    )
-
-    parser.add_argument("--lr", type=float, default=1e-4, help="Learning rate of adam")
+    parser.add_argument("-e", "--epochs", type=int,
+                        default=10, help="Number of epochs")
+    parser.add_argument("--lr", type=float, default=1e-4,
+                        help="Learning rate of adam")
     parser.add_argument(
         "--adam_weight_decay", type=float, default=0.01, help="Weight_decay of adam"
-    )
-    parser.add_argument(
-        "--adam_beta1", type=float, default=0.9, help="Adam first beta value"
-    )
-    parser.add_argument(
-        "--adam_beta2", type=float, default=0.999, help="Adam first beta value"
-    )
-    parser.add_argument(
-        "--print_interval", type=int, default=10, help="Interval of printing"
-    )
-    parser.add_argument(
-        "--checkpoint_path",
-        type=str,
-        default="checkpoints",
-        help="Path to model saving",
     )
 
     args = parser.parse_args()
 
-    if args.with_cuda:
-        device = flow.device("cuda")
-    else:
-        device = flow.device("cpu")
-
-    print("Device is: ", device)
-
     print("Creating Dataloader")
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     configuration = BertConfig(hidden_size=args.hidden_size, num_hidden_layers=args.num_hidden_layers,
-                               num_attention_heads=args.num_attention_heads, intermediate_size=args.intermediate_size)
+                               num_attention_heads=args.num_attention_heads, intermediate_size=4*args.hidden_size)
     model = BertModel(configuration).cuda()
+    optimizer = AdamW(model.parameters(), lr=args.lr,
+                      weight_decay=args.adam_weight_decay)
+    lr_scheduler = get_scheduler(
+        "polynomial",
+        optimizer=optimizer,
+        num_warmup_steps=0,
+        num_training_steps=300
+    )
     cls = BertPreTrainingHeads(args.hidden_size, args.vocab_size).cuda()
-    print("pytorch model", model)
+    print("model structure", model)
     dataset = OneflowDataloaderToPytorchDataset(args)
-    trainer = MultilabelTrainer(model=model)
+    trainer = PreTrainer(
+        max_predictions_per_seq=args.max_predictions_per_seq, model=model)
     text = "Replace me by any text you'd like."
     encoded_input = tokenizer(text, return_tensors='pt')
-    # output = model(**encoded_input)
     for i in range(args.epochs):
         for batch in tqdm(dataset):
             encoded_input.data, label, id, pos, weight = batch
-            trainer.compute_loss(model, cls, label, id, pos, weight, args.max_predictions_per_seq, encoded_input)
-
-    # train_data_loader = OfRecordDataLoader(
-    #     ofrecord_dir=args.ofrecord_path,
-    #     mode="train",
-    #     dataset_size=1024,
-    #     batch_size=args.train_batch_size,
-    #     data_part_num=1,
-    #     seq_length=args.seq_length,
-    #     max_predictions_per_seq=args.max_predictions_per_seq,
-    # )
-    # model = BertModel.from_pretrained("bert-base-uncased")
-    # for epoch in range(args.epochs):
-    #     for batch in train_data_loader:
-    #         print(batch)
+            loss = trainer.compute_loss(
+                model, cls, label, id, pos, weight, encoded_input)
+            loss.backward()
+            optimizer.step()
+            lr_scheduler.step()
+            optimizer.zero_grad()
