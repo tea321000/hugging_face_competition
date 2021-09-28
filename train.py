@@ -17,7 +17,7 @@ class OneflowDataloaderToPytorchDataset(Dataset):
             mode="train",
             dataset_size=1024,
             batch_size=args.train_batch_size,
-            data_part_num=1,
+            data_part_num=2,
             seq_length=args.seq_length,
             max_predictions_per_seq=args.max_predictions_per_seq,
         )
