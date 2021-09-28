@@ -1,1 +1,12 @@
-python train.py --ofrecord_path sample_seq_len_512_example --lr 1e-4 --epochs 10 --train_batch_size 2 --seq_length=512 --max_predictions_per_seq=80 --num_hidden_layers=12 --num_attention_heads=12 --hidden_size=768 --vocab_size=30522
+python train.py \
+--ofrecord_path sample_seq_len_512_example \
+--lr 1e-4 \
+--epochs 10 \
+--train_batch_size 2 \
+--seq_length=512 \
+--max_predictions_per_seq=80 \
+--num_hidden_layers=12 \
+--num_attention_heads=12 \
+--hidden_size=768 \
+--vocab_size=30522 \
+--dataset_size=1024

@@ -15,17 +15,22 @@ class OneflowDataloaderToPytorchDataset(Dataset):
         self.train_data_loader = OfRecordDataLoader(
             ofrecord_dir=args.ofrecord_path,
             mode="train",
-            dataset_size=1024,
+            dataset_size=args.dataset_size,
             batch_size=args.train_batch_size,
             data_part_num=2,
             seq_length=args.seq_length,
             max_predictions_per_seq=args.max_predictions_per_seq,
         )
+        self.dataset_size = args.dataset_size
+
 
     def __len__(self):
-        return 1024
+        return self.dataset_size
 
-    def __getitem__(self, _):
+
+    def __getitem__(self, idx):
+        if idx >= self.dataset_size:
+            raise IndexError
         of_data = self.train_data_loader()
         pt_data = dict()
         pt_data["input_ids"] = torch.tensor(of_data[0].numpy()).cuda()
@@ -155,6 +160,9 @@ if __name__ == '__main__':
     )
     parser.add_argument(
         "--hidden_size", type=int, default=768, help="Hidden size of transformer model",
+    )
+    parser.add_argument(
+        "--dataset_size", type=int, default=1024, help="The number of samples in an epoch cycle",
     )
     parser.add_argument(
         "--num_hidden_layers", type=int, default=12, help="Number of layers"
