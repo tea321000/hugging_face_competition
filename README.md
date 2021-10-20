@@ -1,5 +1,7 @@
 # CCF BDCI BERT系统调优赛题baseline（Pytorch版本）
 
+2021.10.20更新：目前将原来的数据集转换成npy文件格式进行保存，只需要读取npy文件即可，不再需要原来的`OneflowDataloaderToPytorchDataset`，方便参赛者使用其它框架。
+
 此版本基于Pytorch后端的huggingface进行实现。由于此实现使用了Oneflow的dataloader作为数据读入的方式，因此也需要安装Oneflow。其它框架的数据读取可以参考`OneflowDataloaderToPytorchDataset`类的实现。
 
 ## 使用说明
