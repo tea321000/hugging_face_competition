@@ -1,16 +1,10 @@
-import sys
-from abc import ABC
-
 import torch
 from torch import nn
 from torch.utils.data import Dataset
 from transformers import BertTokenizer, BertModel, BertConfig, Trainer, AdamW, get_scheduler
-# from ofrecord_data_utils import OfRecordDataLoader
-# import oneflow as flow
 import argparse
 from tqdm import tqdm
 import numpy as np
-import sys
 
 
 class DataNumpyDataset(Dataset):
@@ -38,50 +32,6 @@ class DataNumpyDataset(Dataset):
             return pt_data, label, masked_lm_ids, masked_lm_positions, masked_lm_weights
         except EOFError:
             raise IOError("Reach the end of the data file")
-
-
-# class OneflowDataloaderToPytorchDataset(Dataset):
-#     def __init__(self, args):
-#         self.train_data_loader = OfRecordDataLoader(
-#             ofrecord_dir=args.ofrecord_path,
-#             mode="train",
-#             dataset_size=args.dataset_size,
-#             batch_size=args.train_batch_size,
-#             data_part_num=2,
-#             seq_length=args.seq_length,
-#             max_predictions_per_seq=args.max_predictions_per_seq,
-#         )
-#         self.dataset_size = args.dataset_size
-#
-#     def __len__(self):
-#         return self.dataset_size
-#
-#     def __getitem__(self, idx):
-#         if idx >= self.dataset_size:
-#             # sys.exit()
-#             raise IndexError
-#
-#         of_data = self.train_data_loader()
-#         pt_data = dict()
-#         pt_data["input_ids"] = torch.tensor(of_data[0].numpy()).cuda()
-#         pt_data["token_type_ids"] = torch.tensor(of_data[3].numpy()).cuda()
-#         pt_data["attention_mask"] = torch.tensor(of_data[2].numpy()).cuda()
-#         label = torch.tensor(of_data[1].numpy()).cuda()
-#         masked_lm_ids = torch.tensor(of_data[4].numpy()).cuda()
-#         masked_lm_positions = torch.tensor(of_data[5].numpy()).cuda()
-#         masked_lm_weights = torch.tensor(of_data[6].numpy()).cuda()
-#
-#         # pt_data_npy = dict()
-#         # pt_data_npy["input_ids"] = of_data[0].numpy()
-#         # pt_data_npy["token_type_ids"] = of_data[3].numpy()
-#         # pt_data_npy["attention_mask"] = of_data[2].numpy()
-#         # label_npy = of_data[1].numpy()
-#         # masked_lm_ids_npy = of_data[4].numpy()
-#         # masked_lm_positions_npy = of_data[5].numpy()
-#         # masked_lm_weights_npy = of_data[6].numpy()
-#
-#         # np.save(f, np.array([pt_data_npy, label_npy, masked_lm_ids_npy, masked_lm_positions_npy, masked_lm_weights_npy]))
-#         return pt_data, label, masked_lm_ids, masked_lm_positions, masked_lm_weights
 
 
 class BertPreTrainingHeads(nn.Module):
